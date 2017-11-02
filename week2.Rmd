@@ -1,0 +1,252 @@
+---
+title: "Week 2 - Data Exploration"
+author: "Freddie Karlbom"
+date: "10/29/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, 
+                      cache = TRUE, 
+                      cache.lazy = FALSE,
+                      message = FALSE)
+
+library(tidyverse)
+library(tidytext)
+library(magrittr)
+library(gridExtra)
+```
+
+## Initial thoughts
+These data sets are very big, and most likely very dirty with misspellings etc., especially the Twitter data. Thus, in order to create a reaonable prediction model, it should be fine with quite harshly removing the dirty data and filter down a smaller clean data set to use for actual model training.
+
+## Overview
+```{r tidytext_transform, cache=TRUE}
+data_sources = c('Twitter', 'Blogs', 'News')
+
+if(!file.exists("./files/joined_data.rds")){
+    twitter_tidy <- read_lines('./texts/en_US.twitter.txt') %>% 
+        tidy() %>% 
+        mutate(source = 'Twitter')
+    blogs_tidy <- read_lines('./texts/en_US.blogs.txt') %>% 
+        tidy() %>% 
+        mutate(source = 'Blogs')
+    news_tidy <- read_lines('./texts/en_US.news.txt') %>%
+        tidy() %>% 
+        mutate(source = 'News')
+    
+    joined_data <- rbind(twitter_tidy, blogs_tidy, news_tidy)
+    colnames(joined_data) <- c('text', 'source')
+    saveRDS(joined_data, "./files/joined_data.rds")
+} else {
+    joined_data <- readRDS("./files/joined_data.rds")
+}
+
+if(!file.exists("./files/exploded_1n.rds")){
+    exploded_1n <- joined_data %>% unnest_tokens(word, text)
+    saveRDS(exploded_1n, "./files/exploded_1n.rds")
+} else {
+    exploded_1n <- readRDS("./files/exploded_1n.rds")
+}
+```
+
+```{r basic_plots}
+count_words <- exploded_1n %>% count(word, sort = TRUE)
+
+plot_top_ten <- count_words %>%
+        mutate(word = reorder(word, n)) %>%
+        head(10) %>%
+        ggplot(aes(word, n)) +
+        geom_col() +
+        xlab('Top 10 most frequent words') +
+        coord_flip()
+
+plot_histogram <- count_words %>% ggplot(aes(log(n))) +
+    geom_histogram(bins=20) +
+    ylab('Relative distribution of word frequencies')
+
+grid.arrange(plot_top_ten, plot_histogram, ncol=2)
+```
+
+As would be expected, the most frequent words are stop words, i.e. words that don't have much use for a semantic analysis of the data set but are very frequent in the language.
+
+We also see that the vast majority of the words actually occurs very infrequently. Thus, it is worth looking into the very infrequent words to see what they are.
+
+## Differences between data sources
+In order to get a sense of the actual content of the data sources and possible differences, let's take a look at the data by data source with common stop words filtered out.
+
+```{r most_common_words}
+data(stop_words)
+
+count_words_grouped <- exploded_1n %>% 
+    anti_join(stop_words) %>%
+    group_by(source) %>%
+    count(word, sort = TRUE)
+
+for (data_source in data_sources) {
+    plot <- count_words_grouped %>%
+        filter(source == data_source) %>%
+        mutate(word = reorder(word, n)) %>%
+        head(10) %>%
+        ggplot(aes(word, n)) +
+        geom_col() +
+        xlab('') +
+        ylab(data_source) +
+        coord_flip()
+        
+    assign(paste("plot_", data_source, sep = ''), plot)
+}
+
+grid.arrange(plot_Twitter, plot_Blogs, plot_News, ncol=3)
+```
+
+With the most common stop words removed, we find that the most common words still look reasonable, though Twitter language seems to differ somewhat in the common use of abbreviations and the news might be more physically localised, referring to places like schools and cities commonly.
+
+Additionally, we see that there are numbers included in the dataset, where it seems likely that we won't every be able to predict which number would fit even if we might predict that it's a number. Thus, they should be removed from the data set at some point.
+
+## Infrequent words
+If we do the opposite and look at the tail of the frequency list for words that only appeared once we find something interesting;
+
+```{r infrequent_words}
+knitr::kable(tail(count_words, 5))
+```
+
+Apparently we have Chinese kanjis in our data set, which might have been expected from Twitter. In order to remove as much as possible of this we can filter our dataset versus an English dictionary or similarly before proceeding with analysis.
+
+A good way to do this is to use the Compact Language Detector libraries. In order to filter out as much as possible, we will use the v2 and v3 or the library in conjuction, and then compare the results.
+
+```{r english_rows, cache = TRUE}
+library(cld2)
+library(cld3)
+
+if(!file.exists("./files/joined_data_cleaned.rds")){
+    joined_data_cleaned <- joined_data %>% mutate(cld2 = cld2::detect_language(text = text, 
+                                                                plain_text = FALSE), 
+                                   cld3 = cld3::detect_language(text = text)) %>%
+        filter(cld2 == "en" & cld3 == "en")
+    saveRDS(joined_data_cleaned, "./files/joined_data_cleaned.rds")
+} else {
+    joined_data_cleaned <- readRDS("./files/joined_data_cleaned.rds")
+}
+
+if(!file.exists("./files/exploded_1n_cleaned.rds")){
+    exploded_1n_cleaned <- joined_data_cleaned %>% unnest_tokens(word, text)
+    saveRDS(exploded_1n_cleaned, "./files/exploded_1n_cleaned.rds")
+} else {
+    exploded_1n_cleaned <- readRDS("./files/exploded_1n_cleaned.rds")
+}
+
+```
+
+## Summary
+```{r summaries}
+numLines <- c()
+numWords <- c()
+numLines_cleaned <- c()
+numWords_cleaned <- c()
+distinctWords <- c()
+distinctWords_cleaned <- c()
+
+for (data_source in data_sources) {
+    numLines[data_source] <- nrow(joined_data %>% filter(source == data_source))
+    numWords[data_source] <- nrow(exploded_1n %>% filter(source == data_source))
+    numLines_cleaned[data_source] <- nrow(joined_data_cleaned %>% filter(source == data_source))
+    numWords_cleaned[data_source] <- nrow(exploded_1n_cleaned %>% filter(source == data_source))
+    
+    distinctWords[data_source] <- exploded_1n %>% 
+        filter(source == data_source) %>% 
+        select(word) %>% 
+        unique() %>% 
+        nrow()
+    
+    distinctWords_cleaned[data_source] <- exploded_1n_cleaned %>% 
+        filter(source == data_source) %>% 
+        select(word) %>% 
+        unique() %>% 
+        nrow()
+}
+
+numLines['Total'] <- nrow(joined_data)
+numWords['Total'] <- nrow(exploded_1n)
+numLines_cleaned['Total'] <- nrow(joined_data_cleaned)
+numWords_cleaned['Total'] <- nrow(exploded_1n_cleaned)
+
+distinctWords['Total'] <- exploded_1n %>% 
+    select(word) %>% 
+    unique() %>% 
+    nrow()
+    
+distinctWords_cleaned['Total'] <- exploded_1n_cleaned %>% 
+    select(word) %>% 
+    unique() %>% 
+    nrow()
+
+summary <- rbind(numLines, numLines_cleaned, numWords, numWords_cleaned, distinctWords, distinctWords_cleaned)
+rownames(summary) <- c('Rows', 'Rows (EN)', 'Words', 'Words (EN)', 'Unique', 'Unique (EN)')
+
+knitr::kable(summary)
+```
+
+The cleaned data set should allow us to build a better model, though some more cleaning probably will be needed. Also, it's still a fairly huge number of words available, and both from performance and precision reasons, we might end up wanting to reduce the number of options for predicted words down quite a bit, possibly to the N most frequently used words.
+
+This will wait though until we start constructing models and can see how performance is affected by our choices.
+
+As for alghorithm, my plan is to use [Keras interface](https://keras.rstudio.com/) to build a recurrent neural network (RNN).
+
+### 2N and 3N ngrams
+Finally, let's plot the most common combinations of words to get an idea of how these looks as well. This might especially give some insight as to whether it makes sense to use more than one preceeding word in order to predict the next coming word.
+
+```{r multiword, cache=TRUE}
+joined_data_cleaned_sample <- sample_n(joined_data_cleaned, 10000)
+
+exploded_2n_cleaned <- joined_data_cleaned_sample %>% unnest_tokens(word, text, token = 'ngrams', n = 2)
+
+exploded_3n_cleaned <- joined_data_cleaned_sample %>% unnest_tokens(word, text, token = 'ngrams', n = 3)
+
+count_words_2n <- exploded_2n_cleaned %>% count(word, sort = TRUE)
+plot_top_ten_2n <- count_words_2n %>%
+        mutate(word = reorder(word, n)) %>%
+        head(10) %>%
+        ggplot(aes(word, n)) +
+        geom_col() +
+        xlab('Top 10 most frequent 2-word combinations') +
+        coord_flip()
+
+count_words_3n <- exploded_3n_cleaned %>% count(word, sort = TRUE)
+plot_top_ten_3n <- count_words_3n %>%
+        mutate(word = reorder(word, n)) %>%
+        head(10) %>%
+        ggplot(aes(word, n)) +
+        geom_col() +
+        xlab('Top 10 most frequent 3-word combinations') +
+        coord_flip()
+
+grid.arrange(plot_top_ten_2n, plot_top_ten_3n, ncol=2)
+```
+
+## Appendix
+
+### Analysis Code
+```{r, ref.label='setup', eval = FALSE, echo = TRUE}
+```
+
+```{r, ref.label='tidytext_transform', eval = FALSE, echo = TRUE}
+```
+
+```{r, ref.label='basic_plots', eval = FALSE, echo = TRUE}
+```
+
+```{r, ref.label='most_common_words', eval = FALSE, echo = TRUE}
+```
+
+```{r, ref.label='infrequent_words', eval = FALSE, echo = TRUE}
+```
+
+```{r, ref.label='english_rows', eval = FALSE, echo = TRUE}
+```
+
+```{r, ref.label='summaries', eval = FALSE, echo = TRUE}
+```
+
+```{r, ref.label='multiword', eval = FALSE, echo = TRUE}
+```
