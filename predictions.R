@@ -1,15 +1,15 @@
 library(sqldf)
 
-# N-gram based prediction with fallback to lower dimension ngrams
-#
-# input.string
-# ngram
-#
-# - ngram.rankings for how many results to return
-# - ngram_x defined for ngram and lower
-#
-# Predictions
 make_prediction <- function(input.string, ngram) {
+    # N-gram based prediction with fallback to lower dimension ngrams
+    #
+    # input.string
+    # ngram
+    #
+    # - ngram.rankings for how many results to return
+    # - ngram_x defined for ngram and lower
+    #
+    # Predictions
     input.string.exploded <- str_split(input.string, " ")[[1]]
     ngram.predictionVector <- tail(input.string.exploded, ngram - 1)
     ngram.predictionString <- paste(ngram.predictionVector, collapse = " ")
@@ -21,9 +21,8 @@ make_prediction <- function(input.string, ngram) {
     predictions <- fn$sqldf(sql)
     
     # If enough matches are found, return results
-    if (nrow(predictions) >= ngram.rankings) return(predictions[1:ngram.rankings,])
+    if (nrow(predictions) >= ngram.rankings) return(predictions[1:ngram.rankings, ])
     
     # Recursive call to lower ngram dimension
-    return(bind_rows(predictions, make_prediction(input.string, ngram - 1))[1:ngram.rankings,])
-    
+    return(bind_rows(predictions, make_prediction(input.string, ngram - 1))[1:ngram.rankings, ])
 }

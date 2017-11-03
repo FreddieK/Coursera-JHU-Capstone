@@ -1,8 +1,8 @@
-# Build N-gram models
-
-# Where is data coming from? Should be included in function call...
-
 get_ngram <- function (number_of_words) {
+    # How to handle all external dependencies in these function calls?
+    # Where is data coming from? Should be included in function call...
+    
+    # Look into alternatives that are more performant
     ngrams <- data %>% unnest_tokens(word, text, token = 'ngrams', n = number_of_words)
     
     ngram_freq <- ngrams %>%
@@ -13,14 +13,13 @@ get_ngram <- function (number_of_words) {
     return(ngram_freq)
 }
 
-# Make models available in global namespace
 build_models <- function() {
-    
+    # Make models available in global namespace
     # construct filename, if exists; load. If not, create ngrams...
     
     for (ngram in 1:highest_order_ngram) {
         ngram.name <- paste("ngram_", ngram, sep = "")
-        print(ngram.name)
+        message(ngram.name)
         
         if(ngram == 1) {
             ngram_1 <<- data %>%
