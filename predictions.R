@@ -1,4 +1,6 @@
 library(sqldf)
+library(stringr)
+library(tidyverse)
 
 make_prediction <- function(input.string, ngram, ngram.rankings) {
   # N-gram based prediction with fallback to lower dimension ngrams
