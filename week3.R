@@ -43,7 +43,6 @@ for (ngramSize in training.param.ngrams) {
     
     data <- sample_frac(training, training_data_size)
     test.result <- run_test()
-    #print(test.result)
     
     model.results <- rbind(test.result, model.results)
   }
