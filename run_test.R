@@ -9,7 +9,6 @@ run_test <- function() {
   message('Making Predictions')
   time.prediction <- system.time({
     testing.predictions <- map(testing.sentences$predictor, function(x) { 
-      x <- gsub("'","", x) # !! Should have been handled in data cleaning
       make_prediction(x, highest_order_ngram, ngram.rankings)[,'outcome']
     })
   })
