@@ -9,29 +9,30 @@ source("./build_ngram_models.R")
 source("./predictions.R")
 source("./run_test.R")
 
+set.seed(1337)
+
+# Training parameters ------------------------------------
+training.param.data.steps <- 3:3
+training.param.data.step.size <- 0.05
+training.param.ngrams <- 3:5
+
+minOccurrence <- 1
+ngram.rankings <- 3
+
+# Preparing test sentences -------------------------------
 if (!exists("joined_data_cleaned")) {
   joined_data_cleaned <- readRDS("./files/joined_data_cleaned.rds") %>% 
     select(-source, -cld2, -cld3)
 }
 
-set.seed(1337)
 training <- sample_frac(joined_data_cleaned, 0.9)
 testing <- sample_n(joined_data_cleaned, 10)
 
-# Preparing test sentences -------------------------------
 testing.sentences <- testing %>% 
   unnest_tokens(word, text, token = 'ngrams', n = 8) %>%
   count(word, sort = TRUE) %>%
   separate(word, into = c('predictor', 'outcome'), sep = "\\s(?=\\S*$)") %>% 
   sample_n(100)
-
-# Training parameters ------------------------------------
-training.param.data.steps <- 1:3
-training.param.data.step.size <- 0.05
-training.param.ngrams <- 1:2
-
-minOccurrence <- 0
-ngram.rankings <- 3 # !! Only three supported in testing currently
 
 # Running Tests ------------------------------------------
 model.results <- data.frame(matrix(ncol = 7, nrow = 0), stringsAsFactors=FALSE)
